@@ -127,18 +127,16 @@ class MessageParser:
         name = b''
         index = pointer
         current_byte = self.message[pointer]
+        was_link = False
         while int(current_byte) != 0:
             if current_byte & 0b11000000 == 0b11000000:
-                index = ((current_byte & 0b00111111) << 8) + self.message[pointer + 1]
-                while int(current_byte) != 0:
-                    part_name, index = self._get_name_part_and_pointer(index)
-                    name += part_name + b'.'
-                    current_byte = self.message[index]
-                pointer += 1
-                break
-            else:
-                part_name, index = self._get_name_part_and_pointer(index)
-                name += part_name + b'.'
+                index = ((current_byte & 0b00111111) << 8) + self.message[index + 1]
+                if not was_link:
+                    pointer += 1
+                was_link = True
+            part_name, index = self._get_name_part_and_pointer(index)
+            name += part_name + b'.'
+            if not was_link:
                 pointer = index
             current_byte = self.message[index]
         pointer += 1
@@ -154,6 +152,7 @@ class MessageParser:
     def get_resource_type_to_bytes(resource_record):
         resource_bytes = []
         splited_name = resource_record.address.split('.')
+        splited_name = splited_name[0: -1]
         for part in splited_name:
             resource_bytes.append(len(part))
             for i in range(len(part)):
@@ -216,4 +215,5 @@ class MessageParser:
         message.extend(query)
         for answer in answers:
             message.extend(MessageParser.get_resource_type_to_bytes(answer))
+        a = bytes(message)
         return bytes(message)
