@@ -57,7 +57,7 @@ class Resolver:
                 answers = []
                 for query in self._message_parser.queries:
                     have_info = self.try_find_info(query, answers)
-                    if query.query_type == ResourceType.PTR and len(self._message_parser.queries) > 1:
+                    if query.query_type == ResourceType.PTR:
                             continue
                     elif not have_info or query.query_type == ResourceType.PTR:
                         self.treat_data_from_receive(data)

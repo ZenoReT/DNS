@@ -163,7 +163,7 @@ class MessageParser:
             for i in range(len(part)):
                 name_in_bytes.append(ord(part[i]))
         name_in_bytes.append(0)
-        return name_in_bytes
+        return bytearray(name_in_bytes)
 
     @staticmethod
     def get_resource_type_to_bytes(resource_record):
@@ -177,15 +177,21 @@ class MessageParser:
         class_bytes = struct.pack('>h', int(resource_record.resource_class))
         resource_bytes.append(class_bytes[0])
         resource_bytes.append(class_bytes[1])
+
         ttl_bytes = struct.pack('>l', int(resource_record.ttl))
         for byte in ttl_bytes:
             resource_bytes.append(byte)
+
         if resource_record.resource_type == ResourceType.NS:
             name_in_bytes = MessageParser.get_name_in_bytes(resource_record.data.decode())
-            resource_bytes.append(len(name_in_bytes))
+            length_bytes = struct.pack('>h', len(name_in_bytes))
+            resource_bytes.append(length_bytes[0])
+            resource_bytes.append(length_bytes[1])
             resource_bytes.extend(name_in_bytes)
         else:
-            resource_bytes.append(len(resource_record.data))
+            length_bytes = struct.pack('>h', len(resource_record.data))
+            resource_bytes.append(length_bytes[0])
+            resource_bytes.append(length_bytes[1])
             for byte in resource_record.data:
                 resource_bytes.append(byte)
         return bytearray(resource_bytes)
