@@ -118,8 +118,13 @@ class MessageParser:
         r_class = ResourceClass(struct.unpack('>h', self.message[pointer+2: pointer+4])[0])
         ttl = struct.unpack('>l', self.message[pointer+4: pointer+8])[0]
         data_length = struct.unpack('>h', self.message[pointer+8: pointer+10])[0]
-        r_data = self.message[pointer+10: pointer+10+data_length]
-        pointer += 10 + data_length
+        r_data = b''
+        pointer += 10
+        if r_type == ResourceType.NS:
+            r_data, pointer = self._get_name_with_pointer(pointer)
+        else:
+            r_data = self.message[pointer: pointer+data_length]
+            pointer += data_length
         container.append(Resource(name, r_type, r_class, ttl, r_data))
         return pointer
 
@@ -135,10 +140,10 @@ class MessageParser:
                     pointer += 1
                 was_link = True
             part_name, index = self._get_name_part_and_pointer(index)
-            name += part_name + b'.'
             if not was_link:
                 pointer = index
             current_byte = self.message[index]
+            name += part_name + b'.'
         pointer += 1
         return name, pointer
 
@@ -149,23 +154,40 @@ class MessageParser:
         return name, index
 
     @staticmethod
-    def get_resource_type_to_bytes(resource_record):
-        resource_bytes = []
-        splited_name = resource_record.address.split('.')
+    def get_name_in_bytes(name):
+        name_in_bytes = []
+        splited_name = name.split('.')
         splited_name = splited_name[0: -1]
         for part in splited_name:
-            resource_bytes.append(len(part))
+            name_in_bytes.append(len(part))
             for i in range(len(part)):
-                resource_bytes.append(ord(part[i]))
-        resource_bytes.append(0)
-        resource_bytes.append(int(resource_record.resource_type))
-        resource_bytes.append(int(resource_record.resource_class))
-        ttl_bytes = struct.pack('>h', int(resource_record.ttl))
-        resource_bytes.append(ttl_bytes[0])
-        resource_bytes.append(ttl_bytes[1])
-        resource_bytes.append(len(resource_record.data))
-        for byte in resource_record.data:
+                name_in_bytes.append(ord(part[i]))
+        name_in_bytes.append(0)
+        return name_in_bytes
+
+    @staticmethod
+    def get_resource_type_to_bytes(resource_record):
+        resource_bytes = []
+        resource_bytes.extend(MessageParser.get_name_in_bytes(resource_record.address))
+
+        type_bytes = struct.pack('>h', int(resource_record.resource_type))
+        resource_bytes.append(type_bytes[0])
+        resource_bytes.append(type_bytes[1])
+
+        class_bytes = struct.pack('>h', int(resource_record.resource_class))
+        resource_bytes.append(class_bytes[0])
+        resource_bytes.append(class_bytes[1])
+        ttl_bytes = struct.pack('>l', int(resource_record.ttl))
+        for byte in ttl_bytes:
             resource_bytes.append(byte)
+        if resource_record.resource_type == ResourceType.NS:
+            name_in_bytes = MessageParser.get_name_in_bytes(resource_record.data.decode())
+            resource_bytes.append(len(name_in_bytes))
+            resource_bytes.extend(name_in_bytes)
+        else:
+            resource_bytes.append(len(resource_record.data))
+            for byte in resource_record.data:
+                resource_bytes.append(byte)
         return bytearray(resource_bytes)
 
     @staticmethod
@@ -177,7 +199,7 @@ class MessageParser:
             recursion_required,
             recursion_available,
             rcode,
-            query,
+            queries,
             answers,
             questions_num=1,
             answers_num=1,
@@ -197,9 +219,9 @@ class MessageParser:
                      recursion_required)
         message.append(recursion_available << 7 | rcode)
 
-        question_num_id = struct.pack('>h', questions_num)
-        message.append(question_num_id[0])
-        message.append(question_num_id[1])
+        questions_num_byte = struct.pack('>h', questions_num)
+        message.append(questions_num_byte[0])
+        message.append(questions_num_byte[1])
 
         answers_num_byte = struct.pack('>h', answers_num)
         message.append(answers_num_byte[0])
@@ -212,8 +234,7 @@ class MessageParser:
         additional_resources_num_byte =  struct.pack('>h', additional_resources_num)
         message.append(additional_resources_num_byte[0])
         message.append(additional_resources_num_byte[1])
-        message.extend(query)
+        message.extend(queries)
         for answer in answers:
             message.extend(MessageParser.get_resource_type_to_bytes(answer))
-        a = bytes(message)
         return bytes(message)

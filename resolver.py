@@ -49,38 +49,35 @@ class Resolver:
         lis.start()
         try:
             while True:
+                self._message_parser = MessageParser()
                 self._cache.update_cache()
-                data, addr = self._dns_listener.recvfrom(1024)
-                if len(data) > 0:
-                    self._client_addr = addr
-                    self._message_parser.from_bytes(data)
-                    have_all_data = True
-                    answers = []
-                    for query in self._message_parser.queries:
-                        have_info = self.try_find_info(query, answers)
-                        if query.query_type == ResourceType.PTR:
-                                continue
-                        if not have_info:
-                            self.treat_data_from_receive(data)
-                            have_all_data = False
-                            break
-                    if have_all_data and len(answers) > 0:
-                        if query.query_type == ResourceType.NS:
-                            print('Тю')
-                        answer = MessageParser.to_bytes(
-                            self._message_parser.transaction_id,
-                            MessageType.ANSWER,
-                            self._message_parser.opcode,
-                            HaveStatus.NO,
-                            self._message_parser.recursion_required,
-                            self._message_parser.recursion_available,
-                            RCode.NO_ERROR,
-                            self._message_parser.message[12:],
-                            answers_num=len(answers),
-                            answers=answers
-                        )
-                        self._dns_listener.sendto(answer, self._client_addr)
-                        self._client_addr = None
+                data, self._client_addr = self._dns_listener.recvfrom(1024)
+                self._message_parser.from_bytes(data)
+                have_all_data = True
+                answers = []
+                for query in self._message_parser.queries:
+                    have_info = self.try_find_info(query, answers)
+                    if query.query_type == ResourceType.PTR and len(self._message_parser.queries) > 1:
+                            continue
+                    elif not have_info or query.query_type == ResourceType.PTR:
+                        self.treat_data_from_receive(data)
+                        break
+                if have_all_data and len(answers) > 0:
+                    answer = MessageParser.to_bytes(
+                        self._message_parser.transaction_id,
+                        MessageType.ANSWER,
+                        self._message_parser.opcode,
+                        HaveStatus.NO,
+                        self._message_parser.recursion_required,
+                        self._message_parser.recursion_available,
+                        RCode.NO_ERROR,
+                        self._message_parser.message[12:],
+                        questions_num=self._message_parser.questions_num,
+                        answers_num=len(answers),
+                        answers=answers
+                    )
+                    self._dns_listener.sendto(answer, self._client_addr)
+                    self._client_addr = None
         finally:
             sys.stderr.write('\nThe server was stopped. '
                   'All useful data will be serialized\n')
@@ -95,11 +92,12 @@ class Resolver:
             data = sender.recv(1024)
             sender.close()
         except socket.error:
-            sys.stderr.write('There were some problems on the send/receive stage, '
+            sys.stderr.write('There were some problems '
+                             'on the send/receive stage, '
                              'please, check your connection.\n')
             answer = MessageParser.to_bytes(
                 self._message_parser.transaction_id,
-                MessageType.ANSWER,
+                MessageType.QUERY,
                 self._message_parser.opcode,
                 HaveStatus.NO,
                 self._message_parser.recursion_required,

@@ -74,12 +74,22 @@ class Cache:
     def add_record(self, ttl, address, resource_type, data, resource_class):
         if ttl < 1000:
             ttl = 1000
-        self.records.append(CacheInfo(
-            address,
-            resource_type,
-            data,
-            ttl,
-            resource_class))
+        was_founded = False
+        for record in self.records:
+            if record.address == address and\
+                    record.resource_type == resource_type and\
+                    record.resource_class == resource_class and\
+                    record.data == data:
+                was_founded = True
+                record.ttl = ttl
+                self._set_death_time(time.time() + ttl, record)
+        if not was_founded:
+            self.records.append(CacheInfo(
+                address,
+                resource_type,
+                data,
+                ttl,
+                resource_class))
 
     def update_cache(self):
         new_cache = []
