@@ -11,6 +11,7 @@ from message_parser import\
     HaveStatus,\
     RCode
 
+#Кэширование отрицательных откликов
 
 class Resolver:
     def __init__(self, next_dns_addr, cash_file_name='cache.txt'):
@@ -57,10 +58,12 @@ class Resolver:
                 answers = []
                 for query in self._message_parser.queries:
                     have_info = self.try_find_info(query, answers)
-                    if query.query_type == ResourceType.PTR:
+                    if query.query_type == ResourceType.PTR and\
+                                self._message_parser.questions_num > 1:
                             continue
-                    elif not have_info or query.query_type == ResourceType.PTR:
+                    elif not have_info:
                         self.treat_data_from_receive(data)
+                        have_all_data = False
                         break
                 if have_all_data and len(answers) > 0:
                     answer = MessageParser.to_bytes(
@@ -80,7 +83,7 @@ class Resolver:
                     self._client_addr = None
         finally:
             sys.stderr.write('\nThe server was stopped. '
-                  'All useful data will be serialized\n')
+                  'All useful data will be serialize\n')
             self._cache.serialize_cache()
 
     def treat_data_from_receive(self, data):
@@ -92,9 +95,6 @@ class Resolver:
             data = sender.recv(1024)
             sender.close()
         except socket.error:
-            sys.stderr.write('There were some problems '
-                             'on the send/receive stage, '
-                             'please, check your connection.\n')
             answer = MessageParser.to_bytes(
                 self._message_parser.transaction_id,
                 MessageType.QUERY,
